@@ -5,6 +5,7 @@ const socketio = require("./socket");
 const connectDB = require("./config/db");
 const authRoutes = require("./routes/authRoutes");
 const messageRoutes = require("./routes/messageRoutes");
+const userRoutes = require("./routes/userRoutes");
 
 const app = express();
 const server = http.createServer(app);
@@ -12,15 +13,15 @@ const server = http.createServer(app);
 app.use(cors());
 app.use(express.json());
 
-// Connect to MongoDB
 connectDB();
 
-// Routes
 app.use("/api/auth", authRoutes);
-app.use("/api/messages", messageRoutes);
+app.use("/api", messageRoutes);
+app.use("/api/users", userRoutes);
 
-// Initialize Socket.io
 socketio(server);
 
 const PORT = 8000;
-server.listen(PORT, () => console.log(`Server running on port http://localhost:${PORT}`));
+server.listen(PORT, () =>
+  console.log(`Server running on port http://localhost:${PORT}`)
+);

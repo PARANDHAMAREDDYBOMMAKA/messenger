@@ -1,4 +1,17 @@
-const { Queue } = require("bullmq");
-const queue = new Queue("messages");
+const queue = require("../config/bullMq");
 
-module.exports = queue;
+const postMessage = async (req, res) => {
+  const { conversationId, text, sender } = req.body;
+  try {
+    const task = await queue.add("newMessage", {
+      conversationId,
+      text,
+      sender,
+    });
+    res
+      .status(202)
+      .json({ message: "Message is being processed", taskId: task.id });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
