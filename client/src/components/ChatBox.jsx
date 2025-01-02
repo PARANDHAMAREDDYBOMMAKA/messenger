@@ -54,16 +54,28 @@ const ChatBox = ({ selectedUser }) => {
     if (input.trim() && selectedUser && selectedUser._id) {
       const message = { text: input, sender, recipient: selectedUser._id };
       socket.emit("sendMessage", message);
-      setMessages((prev) => [...prev, { ...message, timestamp: new Date() }]);
+      setMessages((prev) => [...prev, { ...message, timestamp: new Date() }]); // Add the sent message immediately
       setInput("");
     }
+  };
+
+  const getMessageClass = (senderId) => {
+    return senderId === sender
+      ? "message-sent" // Sent message, aligns on the right
+      : "message-received"; // Received message, aligns on the left
   };
 
   return (
     <div className="flex-1 flex flex-col">
       <div className="flex-1 overflow-y-auto p-4">
         {messages.length > 0 ? (
-          messages.map((msg, index) => <Message key={index} {...msg} />)
+          messages.map((msg, index) => (
+            <Message
+              key={index}
+              {...msg}
+              className={getMessageClass(msg.sender)}
+            />
+          ))
         ) : (
           <p>No messages yet...</p>
         )}

@@ -4,6 +4,7 @@ const getCachedMessages = async (conversationId) => {
   const cachedMessages = await redis.get(`messages:${conversationId}`);
   return cachedMessages ? JSON.parse(cachedMessages) : null;
 };
+
 const getMessages = async (req, res) => {
   const { conversationId } = req.params;
   try {
@@ -26,3 +27,5 @@ const cacheMessages = async (conversationId, messages) => {
     EX: 60 * 5,
   }); // Cache for 5 minutes
 };
+
+module.exports = { getCachedMessages, getMessages, cacheMessages };

@@ -1,3 +1,13 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.message-sent {
+  justify-content: flex-end;
+  background-color: #d1e7dd; /* Light green background for sent messages */
+}
+
+.message-received {
+  justify-content: flex-start;
+  background-color: #f8d7da; /* Light red background for received messages */
+}

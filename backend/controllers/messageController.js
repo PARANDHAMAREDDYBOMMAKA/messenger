@@ -5,7 +5,6 @@ const mongoose = require("mongoose");
 // Send message function
 const sendMessage = async (req, res) => {
   const { sender, recipient, text } = req.body;
-  console.log(sender, recipient, text)
 
   // Validate ObjectIds
   if (
@@ -30,7 +29,6 @@ const sendMessage = async (req, res) => {
 // Get messages function
 const getMessages = async (req, res) => {
   const { userId, otherUserId } = req.query;
-  // console.log(userId, otherUserId);
 
   // Validate ObjectId for otherUserId
   if (!mongoose.Types.ObjectId.isValid(otherUserId)) {
@@ -38,19 +36,15 @@ const getMessages = async (req, res) => {
   }
 
   try {
-    // Find userId's ObjectId using the email
     const user = await User.findOne({ username: userId });
     if (!user) {
       return res
         .status(400)
-        .json({ message: "User not found with that email" });
+        .json({ message: "User  not found with that username" });
     }
 
-    // Now we have the ObjectId for userId
     const userObjectId = user._id;
-    // console.log("User ObjectId:", userObjectId);
 
-    // Get messages between the two users
     const messages = await Message.find({
       $or: [
         { sender: userObjectId, recipient: otherUserId },
