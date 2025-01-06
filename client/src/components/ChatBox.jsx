@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import "./ChatBox.css";
 import Message from "./Message";
 import io from "socket.io-client";
 
@@ -6,30 +7,96 @@ const socket = io("http://localhost:8000");
 
 const ChatBox = ({ selectedUser }) => {
   const [messages, setMessages] = useState([]);
+  const messagesRef = useRef([]);
   const [input, setInput] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
+  const [typingUsers, setTypingUsers] = useState([]);
   const sender = localStorage.getItem("username");
+  const fileInputRef = useRef(null);
+
+  // Typing indicator timeout
+  let typingTimeout;
+
+  const handleInputChange = (e) => {
+    setInput(e.target.value);
+
+    if (!isTyping && selectedUser) {
+      socket.emit("typingStart", { recipient: selectedUser._id });
+      setIsTyping(true);
+    }
+
+    if (typingTimeout) clearTimeout(typingTimeout);
+
+    typingTimeout = setTimeout(() => {
+      if (selectedUser) {
+        socket.emit("typingStop", { recipient: selectedUser._id });
+        setIsTyping(false);
+      }
+    }, 1000);
+  };
 
   if (!sender) {
     return <div>No user found. Please log in.</div>;
   }
 
+  const [editingMessageId, setEditingMessageId] = useState(null);
+  const [showReactionPicker, setShowReactionPicker] = useState(null);
+  const [replyTo, setReplyTo] = useState(null);
+  const [forwardMessage, setForwardMessage] = useState(null);
+
+  const handleMessageStatusUpdate = (messageId, status) => {
+    setMessages((prev) =>
+      prev.map((msg) => (msg._id === messageId ? { ...msg, status } : msg))
+    );
+  };
+
+  const handleReaction = (messageId, reaction) => {
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg._id === messageId
+          ? { ...msg, reactions: [...(msg.reactions || []), reaction] }
+          : msg
+      )
+    );
+  };
+
+  const handleMessageEdit = (messageId, newText) => {
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg._id === messageId ? { ...msg, text: newText, edited: true } : msg
+      )
+    );
+  };
+
+  const handleMessageDelete = (messageId) => {
+    setMessages((prev) => prev.filter((msg) => msg._id !== messageId));
+  };
+
   useEffect(() => {
     if (selectedUser && selectedUser._id) {
+      // Initial fetch
       fetchMessages();
+      
+      // Set up periodic fetching every second
+      const interval = setInterval(fetchMessages, 1000);
+      
       socket.emit("join", sender);
 
-      socket.on("receiveMessage", (message) => {
-        if (
-          message.sender === selectedUser._id ||
-          message.recipient === selectedUser._id
-        ) {
-          setMessages((prev) => [...prev, message]);
-        }
+      socket.on("messageStatusUpdated", ({ messageId, status }) => {
+        handleMessageStatusUpdate(messageId, status);
       });
 
+      // Cleanup interval on component unmount
       return () => {
+        clearInterval(interval);
         socket.off("receiveMessage");
+        socket.off("messageStatusUpdated");
+        socket.off("reactionAdded");
+        socket.off("messageEdited");
+        socket.off("messageDeleted");
       };
+
+
     }
   }, [selectedUser]);
 
@@ -44,7 +111,25 @@ const ChatBox = ({ selectedUser }) => {
       );
       if (!response.ok) throw new Error("Failed to fetch messages");
       const data = await response.json();
-      setMessages(data);
+      
+      // Sort messages by timestamp and remove duplicates
+      // Merge new messages with existing ones, preserving isSender state
+      const mergedMessages = data.map(newMessage => {
+        const existingMessage = messages.find(m => m._id === newMessage._id);
+        return {
+          ...newMessage,
+          isSender: existingMessage ? existingMessage.isSender : 
+                     newMessage.sender === localStorage.getItem("username")
+        };
+      });
+      
+      // Sort messages by timestamp and remove duplicates
+      const uniqueMessages = Array.from(new Set(mergedMessages.map(m => m._id)))
+        .map(id => mergedMessages.find(m => m._id === id))
+        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        
+      setMessages(uniqueMessages);
+      messagesRef.current = uniqueMessages;
     } catch (error) {
       console.error("Error fetching messages:", error);
     }
@@ -52,48 +137,94 @@ const ChatBox = ({ selectedUser }) => {
 
   const sendMessage = () => {
     if (input.trim() && selectedUser && selectedUser._id) {
-      const message = { text: input, sender, recipient: selectedUser._id };
-      socket.emit("sendMessage", message);
-      setMessages((prev) => [...prev, { ...message, timestamp: new Date() }]); // Add the sent message immediately
+      if (editingMessageId) {
+        socket.emit("editMessage", {
+          messageId: editingMessageId,
+          newText: input,
+          recipient: selectedUser._id,
+        });
+        setEditingMessageId(null);
+      } else {
+        const message = {
+          text: input,
+          sender: localStorage.getItem("username"),
+          recipient: selectedUser._id,
+          replyTo: replyTo?._id,
+          media: [],
+          isSender: true
+        };
+        socket.emit("sendMessage", message);
+        setMessages((prev) => [
+          ...prev,
+          {
+            ...message,
+            timestamp: new Date(),
+            status: "sent",
+            isSender: true
+          },
+        ]);
+      }
       setInput("");
     }
   };
 
-  const getMessageClass = (senderId) => {
-    return senderId === sender
-      ? "message-sent" // Sent message, aligns on the right
-      : "message-received"; // Received message, aligns on the left
+  const handleMediaUpload = (e) => {
+    const files = e.target.files;
+    if (files.length > 0) {
+      console.log("Uploaded files:", files);
+    }
   };
 
   return (
     <div className="flex-1 flex flex-col">
-      <div className="flex-1 overflow-y-auto p-4">
-        {messages.length > 0 ? (
-          messages.map((msg, index) => (
-            <Message
+      <div className="flex-1 overflow-y-auto p-4 relative">
+        {messages.map((msg, index) => {
+          const isSender = msg.sender === localStorage.getItem("username");
+          // console.log(msg)
+          // console.log(localStorage.getItem("username"))
+          // console.log(msg)
+          return (
+            <div 
               key={index}
-              {...msg}
-              className={getMessageClass(msg.sender)}
-            />
-          ))
-        ) : (
-          <p>No messages yet...</p>
+              className={`flex ${isSender ? "justify-end" : "justify-start"}`}
+            >
+              <Message 
+                {...msg}
+                isSender={isSender}
+              />
+            </div>
+          );
+        })}
+        {typingUsers.length > 0 && (
+          <div className="typing-indicator">
+            {typingUsers.map((userId) => (
+              <div key={userId} className="typing-bubble">
+                <div className="dot"></div>
+                <div className="dot"></div>
+                <div className="dot"></div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
-      <div className="flex p-4">
+      <div className="flex items-center p-4">
+        <button className="p-2" onClick={() => fileInputRef.current.click()}>
+          Upload
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={handleMediaUpload}
+        />
         <input
           type="text"
-          className="flex-1 p-2 border rounded"
-          placeholder="Type a message"
+          className="flex-1 border p-2"
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={handleInputChange}
+          placeholder="Type a message"
         />
-        <button
-          className="ml-2 px-4 py-2 bg-blue-500 text-white rounded"
-          onClick={sendMessage}
-        >
-          Send
-        </button>
+        <button onClick={sendMessage}>Send</button>
       </div>
     </div>
   );
