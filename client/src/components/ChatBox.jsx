@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from "react";
-import "./ChatBox.css";
 import Message from "./Message";
 import io from "socket.io-client";
 
@@ -95,8 +94,6 @@ const ChatBox = ({ selectedUser }) => {
         socket.off("messageEdited");
         socket.off("messageDeleted");
       };
-
-
     }
   }, [selectedUser]);
 
@@ -112,26 +109,12 @@ const ChatBox = ({ selectedUser }) => {
       if (!response.ok) throw new Error("Failed to fetch messages");
       const data = await response.json();
       
-      // Sort messages by timestamp and remove duplicates
-      // Merge new messages with existing ones, preserving isSender state
-      const mergedMessages = data.map(newMessage => {
-        const existingMessage = messages.find(m => m._id === newMessage._id);
-        return {
-          ...newMessage,
-          isSender: existingMessage ? existingMessage.isSender : 
-                     newMessage.sender === localStorage.getItem("username")
-        };
-      });
+      // Directly set the messages without additional sorting
+      setMessages(data);
+      messagesRef.current = data;
       
-      // Sort messages by timestamp and remove duplicates
-      const uniqueMessages = Array.from(new Set(mergedMessages.map(m => m._id)))
-        .map(id => mergedMessages.find(m => m._id === id))
-        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-        
-      setMessages(uniqueMessages);
-      messagesRef.current = uniqueMessages;
     } catch (error) {
-      console.error("Error fetching messages:", error);
+      console.error("Error fetching messages:", error.message);
     }
   };
 
@@ -168,10 +151,23 @@ const ChatBox = ({ selectedUser }) => {
     }
   };
 
-  const handleMediaUpload = (e) => {
+  const handleMediaUpload = async (e) => {
     const files = e.target.files;
     if (files.length > 0) {
-      console.log("Uploaded files:", files);
+      const formData = new FormData();
+      for (let i = 0; i < files.length; i++) {
+        formData.append("files", files[i]);
+      }
+      try {
+        const response = await fetch("http://localhost:8000/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+        const data = await response.json();
+        console.log("Uploaded files:", data.mediaFiles);
+      } catch (error) {
+        console.error("Error uploading files:", error);
+      }
     }
   };
 
@@ -180,9 +176,6 @@ const ChatBox = ({ selectedUser }) => {
       <div className="flex-1 overflow-y-auto p-4 relative">
         {messages.map((msg, index) => {
           const isSender = msg.sender === localStorage.getItem("username");
-          // console.log(msg)
-          // console.log(localStorage.getItem("username"))
-          // console.log(msg)
           return (
             <div 
               key={index}

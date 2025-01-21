@@ -1,6 +1,20 @@
 const Message = require("../models/Message");
 const User = require("../models/User");
 const mongoose = require("mongoose");
+const multer = require("multer");
+const path = require("path");
+
+// Set up multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "uploads/");
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  }
+});
+
+const upload = multer({ storage });
 
 // Send message function
 const sendMessage = async (req, res) => {
@@ -19,6 +33,11 @@ const sendMessage = async (req, res) => {
     return res.status(400).json({ message: "Invalid replyTo message ID" });
   }
 
+  // Additional validation for message content
+  if (!text || text.trim().length === 0) {
+    return res.status(400).json({ message: "Message text cannot be empty" });
+  }
+
   try {
     const messageData = {
       sender,
@@ -32,6 +51,7 @@ const sendMessage = async (req, res) => {
 
     const newMessage = new Message(messageData);
     await newMessage.save();
+    console.log("Message sent successfully:", newMessage); // Logging
     res.status(200).json({ message: "Message sent successfully", newMessage });
   } catch (error) {
     console.error("Error sending message:", error.message);
@@ -55,7 +75,7 @@ const getMessages = async (req, res) => {
     if (!user) {
       return res
         .status(400)
-        .json({ message: "User  not found with that username" });
+        .json({ message: "User not found with that username" });
     }
 
     const userObjectId = user._id;
@@ -70,6 +90,7 @@ const getMessages = async (req, res) => {
     .populate('sender', 'username email')
     .populate('recipient', 'username email');
 
+    console.log("Messages fetched successfully:", messages); // Logging
     res.status(200).json(messages);
   } catch (error) {
     console.error("Error fetching messages:", error.message);
@@ -78,8 +99,6 @@ const getMessages = async (req, res) => {
       .json({ message: "Error fetching messages", error: error.message });
   }
 };
-
-// Update message status
 const updateMessageStatus = async (req, res) => {
   const { messageId, status } = req.body;
 
@@ -176,7 +195,7 @@ const deleteMessage = async (req, res) => {
   }
 };
 
-// Upload media files
+// Media upload function
 const uploadMedia = async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
@@ -198,7 +217,7 @@ const uploadMedia = async (req, res) => {
   }
 };
 
-// Forward message
+// Forward message function
 const forwardMessage = async (req, res) => {
   const { messageId, recipients } = req.body;
 
@@ -230,7 +249,7 @@ const forwardMessage = async (req, res) => {
   }
 };
 
-// Search messages
+// Search messages function
 const searchMessages = async (req, res) => {
   const { query, userId } = req.query;
 

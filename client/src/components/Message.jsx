@@ -15,6 +15,7 @@ const Message = (props) => {
     onEditClick,
     onDeleteClick,
     onForwardClick,
+    onReplyClick,
     isEditing,
     className,
     isSender
